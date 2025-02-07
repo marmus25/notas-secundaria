@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cuaderno del Profesorado</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         h1, h2 { text-align: center; }
@@ -12,7 +13,6 @@
         th { background: #f4f4f4; }
         input, button, select { padding: 10px; margin-top: 10px; }
         .container { max-width: 800px; margin: auto; }
-        .hide { display: none; }
     </style>
 </head>
 <body>
@@ -28,6 +28,7 @@
         <button onclick="agregarColumnaAsistencia()">Añadir columna de asistencia</button>
         <button onclick="agregarColumnaNota()">Añadir columna de calificaciones</button>
         <button onclick="guardarDatosLocalmente()">Guardar Cambios</button>
+        <button onclick="exportarExcel()">Exportar a Excel</button>
 
         <h3>Mostrar/Ocultar Columnas</h3>
         <div id="toggleColumns">
@@ -42,7 +43,7 @@
                 <tr id="headerRow">
                     <th data-column="Nombre">Nombre</th>
                     <th data-column="Observación">Observación</th>
-                    <th id="asistenciaGlobal">Asistencia</th>
+                    <th data-column="Asistencia">Asistencia</th>
                     <th data-column="Nota">Nota</th>
                     <th data-column="Promedio">Promedio</th>
                     <th data-column="Acciones">Acciones</th>
@@ -65,7 +66,7 @@
                 alert("Por favor, ingresa un nombre.");
             }
         }
-        
+
         function agregarMasivo() {
             let nombres = document.getElementById("listaNombres").value;
             if (nombres.trim()) {
@@ -231,6 +232,26 @@
                 const alumnos = JSON.parse(datosGuardados);
                 alumnos.forEach(alumno => agregarFila(alumno.nombre, alumno.observacion));
             }
+        }
+
+        // Exportar a Excel
+        function exportarExcel() {
+            let wb = XLSX.utils.book_new();
+            let ws_data = [["Nombre", "Observación", "Asistencia", "Nota", "Promedio"]];
+
+            document.querySelectorAll("#listaAlumnos tr").forEach(row => {
+                const nombre = row.cells[0].textContent;
+                const observacion = row.cells[1].querySelector("select").value;
+                const asistencia = row.cells.length > 2 ? row.cells[2].querySelector("input[type='date']")?.value || "" : "";
+                const nota = row.cells.length > 3 ? row.cells[3].querySelector("input[type='number']")?.value || "" : "";
+                const promedio = row.cells.length > 4 ? row.cells[4].textContent : "";
+
+                ws_data.push([nombre, observacion, asistencia, nota, promedio]);
+            });
+
+            let ws = XLSX.utils.aoa_to_sheet(ws_data);
+            XLSX.utils.book_append_sheet(wb, ws, "Alumnos");
+            XLSX.writeFile(wb, "datos_alumnos.xlsx");
         }
 
         // Cargar datos al iniciar
