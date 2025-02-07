@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cuaderno del Profesorado</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         h1, h2 { text-align: center; }
@@ -13,6 +12,7 @@
         th { background: #f4f4f4; }
         input, button, select { padding: 10px; margin-top: 10px; }
         .container { max-width: 800px; margin: auto; }
+        .hide { display: none; }
     </style>
 </head>
 <body>
@@ -21,14 +21,31 @@
         <h2>Registro de Alumnos</h2>
         <input type="text" id="nombreAlumno" placeholder="Nombre del alumno">
         <button onclick="agregarAlumno()">Agregar</button>
+        <h3>Agregar nombres masivamente</h3>
+        <textarea id="listaNombres" placeholder="Escribe nombres separados por coma"></textarea>
+        <button onclick="agregarMasivo()">Agregar en lote</button>
         <button onclick="ordenarPorNombre()">Ordenar por Nombre (A-Z)</button>
-        <button onclick="exportarExcel()">Exportar a Excel</button>
+        <button onclick="agregarColumnaAsistencia()">Añadir columna de asistencia</button>
+        <button onclick="agregarColumnaNota()">Añadir columna de calificaciones</button>
+        <button onclick="guardarDatosLocalmente()">Guardar Cambios</button>
+
+        <h3>Mostrar/Ocultar Columnas</h3>
+        <div id="toggleColumns">
+            <button onclick="toggleColumn('Observación')">Observación</button>
+            <button onclick="toggleColumn('Asistencia')">Asistencia</button>
+            <button onclick="toggleColumn('Nota')">Nota</button>
+            <button onclick="toggleColumn('Promedio')">Promedio</button>
+        </div>
 
         <table>
             <thead>
-                <tr>
-                    <th>Nombre</th>
-                    <th>Observación</th>
+                <tr id="headerRow">
+                    <th data-column="Nombre">Nombre</th>
+                    <th data-column="Observación">Observación</th>
+                    <th id="asistenciaGlobal">Asistencia</th>
+                    <th data-column="Nota">Nota</th>
+                    <th data-column="Promedio">Promedio</th>
+                    <th data-column="Acciones">Acciones</th>
                 </tr>
             </thead>
             <tbody id="listaAlumnos"></tbody>
@@ -36,26 +53,145 @@
     </div>
 
     <script>
+        let asistenciaCount = 1;
+        let notaCount = 1;
+
         function agregarAlumno() {
             let nombre = document.getElementById("nombreAlumno").value;
             if (nombre) {
-                const table = document.getElementById("listaAlumnos");
-                const row = table.insertRow();
-                row.innerHTML = `
-                    <td>${nombre}</td>
-                    <td>
-                        <select>
-                            <option value="Sin observación">Sin observación</option>
-                            <option value="Participa activamente">Participa activamente</option>
-                            <option value="Necesita apoyo">Necesita apoyo</option>
-                            <option value="Ausente frecuente">Ausente frecuente</option>
-                        </select>
-                    </td>
-                `;
+                agregarFila(nombre);
                 document.getElementById("nombreAlumno").value = "";
             } else {
                 alert("Por favor, ingresa un nombre.");
             }
+        }
+        
+        function agregarMasivo() {
+            let nombres = document.getElementById("listaNombres").value;
+            if (nombres.trim()) {
+                let nombresArray = nombres.split(",").map(nombre => nombre.trim()).filter(nombre => nombre !== "");
+                nombresArray.forEach(nombre => agregarFila(nombre));
+                document.getElementById("listaNombres").value = "";
+            } else {
+                alert("Por favor, ingresa al menos un nombre.");
+            }
+        }
+
+        function agregarFila(nombre, observacion = "Sin observación") {
+            const table = document.getElementById("listaAlumnos");
+            const row = table.insertRow();
+            row.innerHTML = `
+                <td>${nombre}</td>
+                <td data-column="Observación">
+                    <select>
+                        <option value="Sin observación" ${observacion === "Sin observación" ? "selected" : ""}>Sin observación</option>
+                        <option value="Participa activamente" ${observacion === "Participa activamente" ? "selected" : ""}>Participa activamente</option>
+                        <option value="Necesita apoyo" ${observacion === "Necesita apoyo" ? "selected" : ""}>Necesita apoyo</option>
+                        <option value="Ausente frecuente" ${observacion === "Ausente frecuente" ? "selected" : ""}>Ausente frecuente</option>
+                    </select>
+                </td>
+                ${Array(asistenciaCount).fill().map((_, index) => `
+                    <td data-column="Asistencia">
+                        <input type="date" id="fechaAsistencia${index}" onchange="aplicarFecha(${index})"> 
+                        <select>
+                            <option value="Presente">Presente</option>
+                            <option value="Ausente">Ausente</option>
+                        </select>
+                    </td>
+                `).join('')}
+                ${Array(notaCount).fill().map((_, index) => `
+                    <td data-column="Nota">
+                        <input type="text" id="nombreActividad${index}" placeholder="Nombre de la actividad" oninput="aplicarNombre(${index})">
+                        <input type="number" class="nota" min="0" max="100" oninput="calcularPromedio(this)">
+                    </td>
+                `).join('')}
+                <td class="promedio" data-column="Promedio">0</td>
+                <td data-column="Acciones"><button onclick="eliminarFila(this)">Eliminar</button></td>
+            `;
+        }
+
+        function agregarColumnaAsistencia() {
+            asistenciaCount++;
+            let headerRow = document.getElementById("headerRow");
+            let newHeader = document.createElement("th");
+            newHeader.textContent = `Asistencia ${asistenciaCount}`;
+            newHeader.setAttribute("data-column", "Asistencia");
+            headerRow.insertBefore(newHeader, headerRow.children[headerRow.children.length - 3]);
+
+            let rows = document.getElementById("listaAlumnos").rows;
+            for (let row of rows) {
+                let newCell = row.insertCell(row.children.length - 3);
+                let columnIndex = asistenciaCount - 1;
+                newCell.setAttribute("data-column", "Asistencia");
+                newCell.innerHTML = `
+                    <input type="date" id="fechaAsistencia${columnIndex}" onchange="aplicarFecha(${columnIndex})"> 
+                    <select>
+                        <option value="Presente">Presente</option>
+                        <option value="Ausente">Ausente</option>
+                    </select>
+                `;
+            }
+        }
+
+        function agregarColumnaNota() {
+            notaCount++;
+            let headerRow = document.getElementById("headerRow");
+            let newHeader = document.createElement("th");
+            newHeader.textContent = `Nota ${notaCount}`;
+            newHeader.setAttribute("data-column", "Nota");
+            headerRow.insertBefore(newHeader, headerRow.children[headerRow.children.length - 2]);
+
+            let rows = document.getElementById("listaAlumnos").rows;
+            for (let row of rows) {
+                let newCell = row.insertCell(row.children.length - 2);
+                let columnIndex = notaCount - 1;
+                newCell.setAttribute("data-column", "Nota");
+                newCell.innerHTML = `
+                    <input type="text" id="nombreActividad${columnIndex}" placeholder="Nombre de la actividad" oninput="aplicarNombre(${columnIndex})">
+                    <input type="number" class="nota" min="0" max="100" oninput="calcularPromedio(this)">
+                `;
+            }
+        }
+
+        function aplicarFecha(index) {
+            let fecha = document.getElementById(`fechaAsistencia${index}`).value;
+            let rows = document.getElementById("listaAlumnos").rows;
+            for (let row of rows) {
+                let fechaInput = row.querySelectorAll(`[data-column="Asistencia"] input[type="date"]`)[index];
+                if (fechaInput) fechaInput.value = fecha;
+            }
+        }
+
+        function aplicarNombre(index) {
+            let nombreActividad = document.getElementById(`nombreActividad${index}`).value;
+            let rows = document.getElementById("listaAlumnos").rows;
+            for (let row of rows) {
+                let nombreInput = row.querySelectorAll(`[data-column="Nota"] input[type="text"]`)[index];
+                if (nombreInput) nombreInput.value = nombreActividad;
+            }
+        }
+
+        function calcularPromedio(input) {
+            let row = input.closest("tr");
+            let notas = row.querySelectorAll(".nota");
+            let suma = 0;
+            let contador = 0;
+
+            notas.forEach(nota => {
+                let valor = parseFloat(nota.value);
+                if (!isNaN(valor)) {
+                    suma += valor;
+                    contador++;
+                }
+            });
+
+            let promedio = contador > 0 ? (suma / contador).toFixed(2) : 0;
+            row.querySelector(".promedio").textContent = promedio;
+        }
+
+        function eliminarFila(btn) {
+            let row = btn.parentNode.parentNode;
+            row.parentNode.removeChild(row);
         }
 
         function ordenarPorNombre() {
@@ -66,21 +202,39 @@
                 let nombreB = b.cells[0].textContent.toLowerCase();
                 return nombreA.localeCompare(nombreB);
             });
+
             rows.forEach(row => table.appendChild(row));
         }
 
-        function exportarExcel() {
-            let wb = XLSX.utils.book_new();
-            let ws_data = [["Nombre", "Observación"]];
+        function toggleColumn(columnName) {
+            let elements = document.querySelectorAll(`[data-column="${columnName}"]`);
+            elements.forEach(el => {
+                el.classList.toggle("hide");
+            });
+        }
+
+        // Guardar y cargar datos usando localStorage
+        function guardarDatosLocalmente() {
+            const alumnos = [];
             document.querySelectorAll("#listaAlumnos tr").forEach(row => {
                 const nombre = row.cells[0].textContent;
                 const observacion = row.cells[1].querySelector("select").value;
-                ws_data.push([nombre, observacion]);
+                alumnos.push({ nombre, observacion });
             });
-            let ws = XLSX.utils.aoa_to_sheet(ws_data);
-            XLSX.utils.book_append_sheet(wb, ws, "Alumnos");
-            XLSX.writeFile(wb, "datos_alumnos.xlsx");
+            localStorage.setItem("alumnos", JSON.stringify(alumnos));
+            alert("Datos guardados localmente");
         }
+
+        function cargarDatosLocalmente() {
+            const datosGuardados = localStorage.getItem("alumnos");
+            if (datosGuardados) {
+                const alumnos = JSON.parse(datosGuardados);
+                alumnos.forEach(alumno => agregarFila(alumno.nombre, alumno.observacion));
+            }
+        }
+
+        // Cargar datos al iniciar
+        cargarDatosLocalmente();
     </script>
 </body>
 </html>
